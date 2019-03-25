@@ -97,14 +97,7 @@ global proc cg_ziva_browse_rivets_setup(){
 
 global proc cg_ziva_write_loa_setup_ui(){
     if(`window -q -ex cg_ziva_rse_ui`){deleteUI cg_ziva_rse_ui;}
-    /*
-    string $ws = `workspace -q -fn`;
-    string $buffer[];
-    $numTokens = `tokenize $ws "/" $buffer`;
-    string $asset = $buffer[(size($buffer)-2)];
-    string $file_path = ($ws + "/data/" + $asset +"_loa_001.mel");
-    string $existing_files[] = `getFileList -filespec ($ws + "/data/" + $asset +"_loa*.mel")`;
-    */
+    
     window -t "Ziva Rivet Setup Export" -wh 715 35 -s false cg_ziva_rse_ui;
         formLayout cg_ziva_rse_lyt;
             button -h 20 -w 80 -ann "Browse to directory" -l "Browse..." -c "cg_ziva_browse_rivets_setup()" cg_ziva_rse_btn0;
@@ -137,11 +130,6 @@ global proc cg_ziva_write_loa_setup_ui(){
 
     showWindow cg_ziva_rse_ui;
     setFocus cg_ziva_rse_btn0;
-    /*
-    if(size($existing_files) != 0){
-        textField -e -tx ($ws + "/data/" + $existing_files[size($existing_files)-1]) cg_ziva_rse_path;
-    }
-    */
 }
 
 global proc cg_ziva_load_rivets_setup(){
