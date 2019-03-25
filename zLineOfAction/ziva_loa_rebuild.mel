@@ -1,0 +1,583 @@
+/*
+How to use:
+Please read instructions here: https://github.com/cgranjon/ziva/blob/master/README.md
+*/
+
+
+global string $rivet_locator[];
+global string $file;
+
+global proc cg_ziva_delete_cpom(){
+    // Removes closestPointOnMesh nodes from the scene
+    delete "*closestPoint*";
+}
+
+global proc cg_ziva_create_rivet(){
+    // Get edges
+    string $mesh_edges[] = `ls -sl`;
+    string $buffer[];
+    $numTokens = `tokenize $mesh_edges[0] "." $buffer`;
+    // Get object name
+    string $mesh_obj = $buffer[0];
+    float $edges_pos[] = `xform -q -ws -t $mesh_edges[0]`;
+    
+    if($edges_pos[0]>0){
+        $mesh_obj = ("L_"+`substring $mesh_obj 3 (size($mesh_obj))`);
+    }else{
+        $mesh_obj = ("R_"+`substring $mesh_obj 3 (size($mesh_obj))`);
+    }
+
+    // Create rivet
+    rivet;
+    // Define rivet name
+    string $rivet_name = `rename ($mesh_obj + "_rivet#")`;
+    string $rivet_shape[] = `listRelatives -s $rivet_name`;
+    // Resize locator 
+    setAttr ($rivet_shape[0]+".localScaleZ") 0.1;
+    setAttr ($rivet_shape[0]+".localScaleX") 0.1;
+    setAttr ($rivet_shape[0]+".localScaleY") 0.1;
+    // Rename uniquely nodes created by the rivet.mel script
+    rename rivet1_rivetAimConstraint1 ($rivet_name + "rivetAimConstraint");
+    rename rivetCurveFromMeshEdge1 ($rivet_name + "_CurveFromMeshEdge1");
+    rename rivetCurveFromMeshEdge2 ($rivet_name + "_CurveFromMeshEdge2");
+    rename rivetLoft1 ($rivet_name + "_Loft");
+    rename rivetPointOnSurfaceInfo1 ($rivet_name + "_PointOnSurfaceInfo");
+    
+}
+
+global proc cg_ziva_create_rivet_check(){
+    // Checks if the mesh object prefix is "C" 
+    string $sel[] = `ls -sl`;
+    switch(`substring $sel[0] 1 1`){
+        case "C":
+            cg_ziva_create_rivet();
+            warning "#####     The source mesh has \"C_\" as a prefix, this has been replaced by the best estimated prefix.";
+            break;
+        default:
+            cg_ziva_create_rivet();
+            break;
+    }
+}
+
+global proc cg_ziva_create_loa(){
+    waitCursor -state on;
+    // Select two rivets first, then the muscle
+    string $rivets[] = `ls -sl`;
+    string $loc_shape[] = `listRelatives -s $rivets`;
+    string $loa = `curve -d 1 -p 0 0 0 -p 1 0 0 -k 0 -k 1`;
+    string $first_letter = `substring $rivets[0] 1 1`;
+    
+    if(`size($rivets)` == 3){
+        $loa = `rename $loa ($rivets[2]+"_LOA")`;
+        //print "yes";
+    }else{
+        $loa = `rename $loa ($first_letter+"_muscle_LOA")`;
+        //print "no";
+    }
+
+    connectAttr -f ($loc_shape[0]+".worldPosition[0]") ($loa+".controlPoints[0]");
+    connectAttr -f ($loc_shape[1]+".worldPosition[0]") ($loa+".controlPoints[1]");
+    
+    // Create zLineOfAction if a muscle is selected
+    if(`size($rivets)` == 3){
+        select -r $loa;
+        select -tgl $rivets[2];
+        string $name_loa[] = `ziva -loa`;
+        rename $name_loa[0] ($rivets[2]+"_zLineOfAction");
+        select -cl;
+    }
+    evalDeferred("waitCursor -state off");
+}
+
+global proc cg_ziva_browse_rivets_setup(){
+    string $ws = `workspace -q -fn`;
+    string $buffer[];
+    $numTokens = `tokenize $ws "/" $buffer`;
+    string $folder = ("/"+$buffer[0]+"/"+$buffer[1]+"/build/character");
+    string $file[] = `fileDialog2 -ds 2 -dir $folder -okc "Accept" -ff "*.mel" -fm 1`;
+    
+    
+    textField -e -tx $file[0] cg_ziva_rse_path;
+}
+
+global proc cg_ziva_write_loa_setup_ui(){
+    if(`window -q -ex cg_ziva_rse_ui`){deleteUI cg_ziva_rse_ui;}
+    string $ws = `workspace -q -fn`;
+    string $buffer[];
+    $numTokens = `tokenize $ws "/" $buffer`;
+    string $asset = $buffer[(size($buffer)-2)];
+    string $file_path = ($ws + "/data/" + $asset +"_loa_001.mel");
+    string $existing_files[] = `getFileList -filespec ($ws + "/data/" + $asset +"_loa*.mel")`;
+
+    window -t "Ziva Rivet Setup Export" -wh 715 35 -s false cg_ziva_rse_ui;
+        formLayout cg_ziva_rse_lyt;
+            button -h 20 -w 80 -ann "Browse to directory" -l "Browse..." -c "cg_ziva_browse_rivets_setup()" cg_ziva_rse_btn0;
+            textField -h 20 -tx "Browse to a valid asset" cg_ziva_rse_path;
+            button -h 20 -l "Export" -c "cg_ziva_write_rivets_setup()" cg_ziva_rse_btn1;
+            button -h 20 -l "Import" -c "cg_ziva_load_rivets_setup()" cg_ziva_rse_btn2;
+        
+        formLayout -e 
+            -af cg_ziva_rse_btn0 "top" 5
+            -ap cg_ziva_rse_btn0 "right" 5 10
+            -af cg_ziva_rse_btn0 "bottom" 5
+            -af cg_ziva_rse_btn0 "left" 5
+            
+            -af cg_ziva_rse_path "top" 5
+            -ac cg_ziva_rse_path "left" 5 cg_ziva_rse_btn0
+            -af cg_ziva_rse_path "bottom" 5
+            -ac cg_ziva_rse_path "right" 5 cg_ziva_rse_btn1
+            
+            -af cg_ziva_rse_btn1 "top" 5
+            -ap cg_ziva_rse_btn1 "right" 5 90
+            -af cg_ziva_rse_btn1 "bottom" 5
+            -ap cg_ziva_rse_btn1 "left" 5 80
+            
+            -af cg_ziva_rse_btn2 "top" 5
+            -af cg_ziva_rse_btn2 "right" 5
+            -af cg_ziva_rse_btn2 "bottom" 5
+            -ap cg_ziva_rse_btn2 "left" 5 90
+            
+        cg_ziva_rse_lyt;
+
+    showWindow cg_ziva_rse_ui;
+    setFocus cg_ziva_rse_btn0;
+
+    if(size($existing_files) != 0){
+        textField -e -tx ($ws + "/data/" + $existing_files[size($existing_files)-1]) cg_ziva_rse_path;
+    }
+}
+
+global proc cg_ziva_load_rivets_setup(){
+    global string $file;
+    waitCursor -state on;
+    $file = `textField -q -tx cg_ziva_rse_path`;
+    eval("source \""+$file+"\"");
+    waitCursor -state off;
+}
+
+global proc cg_ziva_write_rivets_setup(){
+    global string $rivet_locator[];
+    global string $file;
+    $file = `textField -q -tx cg_ziva_rse_path`;
+    waitCursor -state on;
+    
+    // Get all rivetLofts
+    string $lofts[] =`ls "*_Loft*"`;
+    
+    // Get all LOA curves
+    string $loas[] = `ls "*_LOA"`;
+    string $rivet_edges[];
+    
+    // Start wrinting to file
+    $fileId=`fopen $file "w"`;
+    
+    // Create group for all
+    string $us_loa_top_group = "ziva_loa_rivet_setup_GRP";
+    fprint $fileId ("waitCursor -state on;\n");
+    fprint $fileId ("createNode -n \""+$us_loa_top_group+"\" transform;\n");
+    
+    // Loop for rivets printing
+    for($i=0; $i<(size($lofts)); $i++){
+        
+        // Get source mesh edges
+        string $rivet_curveMesh_nodes[] = `listConnections -type "curveFromMeshEdge" $lofts[$i]`;
+        $rivet_edges[0] = `getAttr ($rivet_curveMesh_nodes[0]+".edgeIndex[0]")`;
+        $rivet_edges[1] = `getAttr ($rivet_curveMesh_nodes[1]+".edgeIndex[0]")`;
+        
+        // Get mesh
+        string $rivet_mesh[] = `listConnections -type "mesh" $rivet_curveMesh_nodes[0]`;
+        
+        // Get locator
+        select -r `listConnections -s off $lofts[$i]`;
+        $rivet_locator = `listConnections -s off -et true -type "transform"`;
+        select -cl;
+        
+        // Print rivets creation
+        fprint $fileId ("\n\/\/ "+ $rivet_locator[0] +"\n");
+        fprint $fileId ("select -r " + $rivet_mesh[0] + ".e[" + $rivet_edges[0] +"];\n");
+        fprint $fileId ("select -tgl " + $rivet_mesh[0] + ".e[" + $rivet_edges[1] +"];\n");
+        fprint $fileId ("cg_ziva_create_rivet();\n");
+        fprint $fileId ("rename " + $rivet_locator[0] + ";\n");
+        fprint $fileId ("parent "+ $rivet_locator[0] +" \""+$us_loa_top_group+"\";\n");
+    }
+    
+    // Loop for curve printing
+    if(`size($loas)` != 0){        
+        for($i=0; $i<(size($loas)); $i++){
+            
+            // Get curve shape
+            string $loa_shape[] =`listRelatives -s $loas[$i]`;
+    
+            // Get curves connections
+            string $crv_connections[] = `listHistory -future true -lv 0 $loa_shape[0]`;
+            // List zFibers (because there can be only one per muscle)
+            string $loa_zfib[] = `ls -type "zFiber" $crv_connections`;
+            //string $loa_zloa[] = `ls -type "zLineOfAction" $crv_connections`;
+            
+            // Get locator driving curves
+            string $loa_loc1[] = `listConnections ($loa_shape[0]+".controlPoints[0]")`;
+            string $loa_loc2[] = `listConnections ($loa_shape[0]+".controlPoints[1]")`;
+            string $loa_loc1_shape[] = `listRelatives -s $loa_loc1[0]`;
+            string $loa_loc2_shape[] = `listRelatives -s $loa_loc2[0]`;
+            
+            // Start writeing to file
+            fprint $fileId ("\n\/\/ "+$loas[$i]+"\n");
+            
+            // Create curve and link it to rivet locators
+            fprint $fileId ("curve -d 1 -p 0 0 0 -p 1 0 0 -k 0 -k 1;\n");
+            fprint $fileId ("rename " + $loas[$i] + ";\n");
+            fprint $fileId ("connectAttr -f " + ($loa_loc1[0]+".worldPosition[0] ") + ($loa_shape[0]+".controlPoints[0]") + ";\n");
+            fprint $fileId ("connectAttr -f " + ($loa_loc2[0]+".worldPosition[0] ") + ($loa_shape[0]+".controlPoints[1]") + ";\n");
+            fprint $fileId ("parent "+ $loas[$i] +" \""+$us_loa_top_group+"\";\n");
+            
+            // Loop through all zFibers
+            for($s=0; $s<(size($loa_zfib)); $s++){
+                
+                // Get all connections of a specific zFiber
+                string $loa_zloa_connections[] = `listHistory $loa_zfib[$s]`;
+                string $loa_zloa[] = `ls -exactType "zLineOfAction" $loa_zloa_connections`;
+                string $loa_muscle[] = `ls -exactType "transform" $loa_zloa_connections`;
+                // Get values of the zLineOfAction attributes
+                float $loa_bias = `getAttr ($loa_zloa[0]+".stretchBias")`;
+                float $loa_pos_sens = `getAttr ($loa_zloa[0]+".posSensitivity")`;
+                
+                // Create zLineOfAction
+                fprint $fileId ("select -r "+$loas[$i]+";\n");
+                fprint $fileId ("select -tgl "+$loa_muscle[0]+";\n");
+                fprint $fileId ("string $created_zloa[] = `ziva -loa`;\n");
+                fprint $fileId ("rename $created_zloa[0] "+ $loa_zloa[0] + ";\n");
+                
+                // Set zLineOfAction attributes
+                fprint $fileId ("setAttr " + $loa_zloa[0] + ".stretchBias " + $loa_bias +";\n");
+                fprint $fileId ("setAttr " + $loa_zloa[0] + ".posSensitivity " + $loa_pos_sens +";\n");  
+            }
+        }
+    }
+    fprint $fileId ("\nprint \"All rivets and lineOfActions re-created.\";\n");
+    fprint $fileId ("evalDeferred(\"waitCursor -state off\");\n");
+    fprint $fileId ("select -cl;");
+    fclose $fileId;
+    
+    evalDeferred("waitCursor -state off");
+    print ("Export done:    "+ $file);
+}
+
+global proc cg_ziva_mirror_rivet(){
+    waitCursor -state on;
+    // Get rivets
+    string $rivets[] = `ls -sl`;
+    
+    for($i=0; $i<size($rivets); $i++){
+        // Get bone name from connections
+        // List all downstream connections from loft nodes of rivet
+        string $bone;
+        string $bone_mirror;
+        string $rivet_ds_nodes[] = `listHistory -ac -f false ($rivets[$i]+"_Loft")`;
+        string $bone_shape[] = `ls -et "mesh" $rivet_ds_nodes`;
+        string $bone_shape_parent[] = `listRelatives -p $bone_shape[0]`;
+        if($bone_shape[0] == ($bone_shape_parent[0]+"Shape")){
+            $bone = $bone_shape_parent[0];
+        }else{
+            error ("Problem with shape name: "+$bone_shape[0]);
+        }
+        
+        // Evaluate where the mirrored rivet should go
+        switch(`substring $bone 1 1`){
+            case "L":
+                $bone_mirror = ("R_"+`substring $rivets[$i] 3 (size($rivets[$i])-7)`);
+                break;
+            case "R":
+                $bone_mirror = ("L_"+`substring $rivets[$i] 3 (size($rivets[$i])-7)`);
+                break;
+            case "C":
+                $bone_mirror = ("C_"+`substring $rivets[$i] 3 (size($rivets[$i])-7)`);
+                break;
+            default:
+                break;
+        }
+
+        // Get the two edges that drive the rivet 
+        string $edge1 = `getAttr ($rivets[$i]+"_CurveFromMeshEdge1.edgeIndex[0]")`;
+        string $edge2 = `getAttr ($rivets[$i]+"_CurveFromMeshEdge2.edgeIndex[0]")`;
+        
+        // Get a full string of the vertices that make one edge
+        select -r `polyListComponentConversion -tv ($bone + ".e[" + $edge1 + "]")`;
+        string $edge1_points[] = `ls -fl -sl`;
+        select -r `polyListComponentConversion -tv ($bone + ".e[" + $edge2 + "]")`;
+        string $edge2_points[] = `ls -fl -sl`;  
+              
+        // Get world position of each vertex
+        float $edge1_point1[] = `xform -q -ws -t $edge1_points[0]`;
+        float $edge1_point2[] = `xform -q -ws -t $edge1_points[1]`;
+        float $edge2_point1[] = `xform -q -ws -t $edge2_points[0]`;
+        float $edge2_point2[] = `xform -q -ws -t $edge2_points[1]`;
+        
+        // Get closest mirrored point
+        string $cpom1 = `createNode closestPointOnMesh`;
+        // Get -X tranform values
+        setAttr ($cpom1+".inPosition") (-$edge1_point1[0]) $edge1_point1[1] $edge1_point1[2];
+        connectAttr -f ($bone_mirror + ".outMesh") ($cpom1 + ".inMesh");
+        int $closestVert1 = `getAttr ($cpom1 + ".closestVertexIndex")`;
+        float $vtxPos1[] = `xform -q -ws -t ($bone_mirror + ".vtx[" + $closestVert1 + "]")`;
+        
+        string $cpom2 = `createNode closestPointOnMesh`;
+        // Get -X tranform values
+        setAttr ($cpom2+".inPosition") (-$edge1_point2[0]) $edge1_point2[1] $edge1_point2[2];
+        connectAttr -f ($bone_mirror + ".outMesh") ($cpom2 + ".inMesh");
+        int $closestVert2 = `getAttr ($cpom2 + ".closestVertexIndex")`;
+        float $vtxPos2[] = `xform -q -ws -t ($bone_mirror + ".vtx[" + $closestVert2 + "]")`;
+        
+        string $cpom3 = `createNode closestPointOnMesh`;
+        // Get -X tranform values
+        setAttr ($cpom3+".inPosition") (-$edge2_point1[0]) $edge2_point1[1] $edge2_point1[2];
+        connectAttr -f ($bone_mirror + ".outMesh") ($cpom3 + ".inMesh");
+        int $closestVert3 = `getAttr ($cpom3 + ".closestVertexIndex")`;
+        float $vtxPos3[] = `xform -q -ws -t ($bone_mirror + ".vtx[" + $closestVert3 + "]")`;
+        
+        string $cpom4 = `createNode closestPointOnMesh`;
+        // Get -X tranform values
+        setAttr ($cpom4+".inPosition") (-$edge2_point2[0]) $edge2_point2[1] $edge2_point2[2];
+        connectAttr -f ($bone_mirror + ".outMesh") ($cpom4 + ".inMesh");
+        int $closestVert4 = `getAttr ($cpom4 + ".closestVertexIndex")`;
+        float $vtxPos4[] = `xform -q -ws -t ($bone_mirror + ".vtx[" + $closestVert4 + "]")`;
+        
+        // Select edge1 vertices
+        select -r ($bone_mirror + ".vtx[" + $closestVert1 + "]");
+        select -tgl ($bone_mirror + ".vtx[" + $closestVert2 + "]");
+        string $edge1_m[] = `polyListComponentConversion -te -in`;
+        
+        // Select edge2 vertices
+        select -r ($bone_mirror + ".vtx[" + $closestVert3 + "]");
+        select -tgl ($bone_mirror + ".vtx[" + $closestVert4 + "]");
+        string $edge2_m[] = `polyListComponentConversion -te -in`;
+        
+        select -r $edge1_m[0];
+        select -tgl $edge2_m[0];
+        
+        cg_ziva_create_rivet();
+    }
+    evalDeferred("waitCursor -state off");
+    cg_ziva_delete_cpom();
+}
+
+global proc cg_ziva_mirror_loa(){
+    waitCursor -state on; 
+    string $loas[] = `ls -sl`;
+    
+    for($i=0; $i<(size($loas)); $i++){
+        // Get curve shape name
+        string $loa_shape[] = `listRelatives -s $loas[$i]`;
+        string $loa_mirror_name;
+        string $loa_zloa[] = `listConnections -t "zLineOfAction" $loa_shape[0]`;
+        float $loa_bias = `getAttr ($loa_zloa[0]+".stretchBias")`;
+        float $loa_pos_sens = `getAttr ($loa_zloa[0]+".posSensitivity")`;
+
+        // List input rivet locators
+        string $loa_rivet1[] = `listConnections ($loa_shape[0]+".controlPoints[0]")`;
+        string $loa_rivet2[] = `listConnections ($loa_shape[0]+".controlPoints[1]")`;
+        string $loa_rivet1_mirror;
+        string $loa_rivet2_mirror;
+        
+        // Prepare and parse all names
+        switch(`substring $loas[$i] 1 1`){
+            case "L" :
+                $loa_rivet1_mirror = ("R_"+`substring $loa_rivet1[0] 3 (size($loa_rivet1[0]))`);
+                $loa_rivet2_mirror = ("R_"+`substring $loa_rivet2[0] 3 (size($loa_rivet2[0]))`);
+                $loa_mirror_name = ("R_"+`substring $loas[$i] 3 (size($loas[$i]))`);
+                break;
+            case "R" :
+                $loa_rivet1_mirror = ("L_"+`substring $loa_rivet1[0] 3 (size($loa_rivet1[0]))`);
+                $loa_rivet2_mirror = ("L_"+`substring $loa_rivet2[0] 3 (size($loa_rivet2[0]))`);
+                $loa_mirror_name = ("L_"+`substring $loas[$i] 3 (size($loas[$i]))`);
+                break;
+            case "C" :
+                error "#####     Curves for zLineOfAction should start with \"L_\" or \"R_\" only.";
+                break;
+            default :
+                error "#####     line of action not named properly. It needs a L or R prefix.";
+                break;
+        }
+        
+        string $mirror_muscle = `substring $loa_mirror_name 1 (size($loa_mirror_name)-4)`;
+        string $mirror_zloa_node = $mirror_muscle + "_zLineOfAction";
+
+        // Create zLineOfAction
+        select -r $loa_rivet1_mirror;
+        select -tgl $loa_rivet2_mirror;
+        // Also add the mirrored muscle to the selection
+        select -tgl $mirror_muscle;
+        cg_ziva_create_loa();
+
+        // Set attribute values 
+        setAttr ($mirror_zloa_node+".stretchBias") $loa_bias;
+        setAttr ($mirror_zloa_node+".posSensitivity") $loa_pos_sens;
+        select -cl;
+    }
+    evalDeferred("waitCursor -state off");
+}
+
+global proc cg_ziva_mirror_loa_setup(){
+    waitCursor -state on;
+    if(size(`ls -sl`) == 0){
+        error "Select your loa/rivets setup.";
+    }else{
+        string $rivets[] = `ls -sl "*rivet*"`;
+        string $loas[] = `ls -sl "*_LOA"`;
+        
+        select -r $rivets;
+        cg_ziva_mirror_rivet();
+        select -r $loas;
+        cg_ziva_mirror_loa();   
+    }
+    evalDeferred("waitCursor -state off");
+}
+
+global proc cg_ziva_loa_bias_eval(){
+    global string $gMainProgressBar;
+    textScrollList -e -removeAll zlb_tsl1;
+    textScrollList -e -removeAll zlb_tsl2;
+    waitCursor -st on;
+    /*------------------------ Step 1 ------------------------*/
+    // Select lineOfAction curves
+    string $crv[] = `ls -sl`;
+    
+    if(`size $crv` == 0){error "Select some curves";}
+    // Get frame range
+    int $ts = `playbackOptions -q -min`;
+    int $te = `playbackOptions -q -max`;
+    // Define total number of frames
+    int $trange = $te - $ts;
+    // Define eval point offset (i.e. frame offset for evaluation)
+    int $tstep = `intField -q -v zlb_fld1`;
+    // Define how many curves over how many frame there is to evaluate
+    int $total_crv = `size $crv`;
+    int $total_frm = $trange / $tstep;
+    // Define array for curve length values
+    float $values[];
+    
+    progressBar -edit -beginProgress -status "Processing evaluation ..." -maxValue ($total_crv * $total_frm) $gMainProgressBar;
+    
+    /*------------------------ Step 2 ------------------------*/
+    // For every curve, loop add length values for every eval point
+    // Start evaluation at first frame for each curve
+    currentTime $ts;
+    // Get start frame curve length
+    float $start_len = `arclen $crv[0]`;
+    // Loop over all curves
+    for($i=0; $i<$total_crv; $i++){
+        // Add curve to UI list 
+        textScrollList -e -a $crv[$i] zlb_tsl1;
+        
+        // Loop over all eval points
+        for($t=$ts; $t<=$te; $t=$t+$tstep){
+            currentTime $t;
+            // Insert curve length value at index 0 for given eval point
+            float $tmp_crv_len = `arclen $crv[$i]`;
+            floatArrayInsertAtIndex(0, $values, $tmp_crv_len);
+            progressBar -edit -step 1 $gMainProgressBar;
+        }
+    
+        // Sort length values
+        float $valuesSrt[] = `sort $values`;
+        float $lowest = $valuesSrt[0];
+        int $total_values = `size($values)`;
+        float $highest = $valuesSrt[$total_values-1];
+        // Calculate bias
+        float $bias = ($lowest + $highest - (2 * $start_len)) / 4;
+        
+        textScrollList -e -a $bias zlb_tsl2;
+        clear $valuesSrt;
+        clear $values;
+    }
+    // Empty value array
+    currentTime $ts;
+    select -cl;
+    progressBar -edit -endProgress $gMainProgressBar;
+    evalDeferred("waitCursor -state off");
+    
+    // Print log
+    //print ("Line of Action Length ---------------- >       Start: " + $start_len + "       Min: " + $lowest + "       Max: " + $highest + "       Recommended bias at start frame: " + $bias +"\n");
+    print ($total_crv + " curves evaluated over a span of " + $total_frm + " frames.");
+}
+
+global proc cg_ziva_loa_bias_set(){
+    waitCursor -st on;
+    string $curves[] = `textScrollList -q -ai zlb_tsl1`;
+    string $bias[] = `textScrollList -q -ai zlb_tsl2`;
+    
+    for($i=0; $i<(size($curves)); $i++){
+        // Get zLineOfAction for a given curve
+        string $curve_shape[] = `listRelatives -s $curves[$i]`;
+        string $loa[] = `listConnections -t "zLineOfAction" $curve_shape[0]`;
+        float $est_bias = $bias[$i];
+        
+        setAttr ($loa[0]+".stretchBias") $est_bias;
+    }
+    evalDeferred("waitCursor -state off");
+}
+
+global proc cg_ziva_loa_bias_ui(){
+    if(`window -q -ex zlb_win`){deleteUI zlb_win;}
+    
+    window -t "zLineOfAction Bias Estimation" zlb_win;
+    formLayout zlb_lyt;
+        text -l "Evaluated curves" -h 20 zlb_txt1;
+        text -l "Estimated bias" -h 20 zlb_txt2;
+        text -l "->" zlb_txt3;
+        textScrollList -dcc "select -r `textScrollList -q -si zlb_tsl1`;" zlb_tsl1;
+        textScrollList zlb_tsl2;
+        text -l "Evaluate every " -h 20 zlb_txt4;
+        intField -w 40 -v 5 -h 20 zlb_fld1;
+        text -l " frames." -h 20 zlb_txt5;
+        button -l "Evaluate selected curves" -c "cg_ziva_loa_bias_eval()" zlb_btn1;
+        button -l "Set biases values" -c "cg_ziva_loa_bias_set();" zlb_btn2;
+    /*
+    
+    || 45 | 50 | 55 ||
+    
+    */  
+    formLayout -e 
+        -af zlb_txt1 "top" 5
+        -af zlb_txt1 "left" 5
+        -ap zlb_txt1 "right" 0 45
+                
+        -af zlb_txt2 "top" 5
+        -af zlb_txt2 "right" 5
+        -ap zlb_txt2 "left" 0 55
+                
+        -af zlb_btn1 "left" 5
+        -af zlb_btn1 "bottom" 5
+        -ap zlb_btn1 "right" 0 50
+        
+        -af zlb_btn2 "right" 5
+        -af zlb_btn2 "bottom" 5
+        -ap zlb_btn2 "left" 0 50
+        
+        -aoc zlb_txt4 "left" 0 zlb_txt1
+        -ac zlb_txt4 "bottom" 10 zlb_btn1
+        
+        -ac zlb_fld1 "left" 0 zlb_txt4
+        -aoc zlb_fld1 "top" 0 zlb_txt4
+        
+        -ac zlb_txt5 "left" 0 zlb_fld1
+        -aoc zlb_txt5 "top" 0 zlb_txt4
+        
+        -af zlb_tsl1 "left" 5
+        -ap zlb_tsl1 "right" 0 45
+        -ac zlb_tsl1 "top" 2 zlb_txt1
+        -ac zlb_tsl1 "bottom" 10 zlb_txt4
+        
+        -af zlb_tsl2 "right" 5
+        -ap zlb_tsl2 "left" 0 55
+        -ac zlb_tsl2 "top" 2 zlb_txt2
+        -ac zlb_tsl2 "bottom" 10 zlb_txt4
+        
+        -ac zlb_txt3 "top" 0 zlb_txt1
+        -ap zlb_txt3 "left" 0 45
+        -ap zlb_txt3 "right" 0 55
+        -ac zlb_txt3 "bottom" 0 zlb_btn1
+        
+    zlb_lyt;
+    
+    showWindow zlb_win;
+}
