@@ -5,7 +5,7 @@ Please keep in mind that all scripts are based of my use of the software, some o
 
 At the moment, warning and error messages might not be coded to guide the user.
 
-
+_____________________________________________________________________________________________________________
 # ziva_loa_rebuild.mel
 Please make sure that you have all dependencies listed below before using:
 - https://plus.google.com/108730905615837309068/posts/GdL56AbxQ32
