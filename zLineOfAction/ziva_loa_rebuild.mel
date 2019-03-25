@@ -91,14 +91,7 @@ global proc cg_ziva_create_loa(){
 
 global proc cg_ziva_browse_rivets_setup(){
     string $ws = `workspace -q -fn`;
-    /*
-    string $buffer[];
-    $numTokens = `tokenize $ws "/" $buffer`;
-    string $folder = ("/"+$buffer[0]+"/"+$buffer[1]+"/build/character");
-    */
-    string $file[] = `fileDialog2 -ds 2 -dir $ws -okc "Accept" -ff "*.mel" -fm 1`;
-    
-    
+    string $file[] = `fileDialog2 -ds 2 -dir $ws -okc "Accept" -ff "*.mel" -fm 0`;
     textField -e -tx $file[0] cg_ziva_rse_path;
 }
 
