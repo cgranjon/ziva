@@ -23,17 +23,18 @@ Select two polygon edges and run:
 cg_ziva_create_rivet_check();
 ```
 #### How to create a curve to drive a zLineOfAction ?
-Selection order is important. Select two rivets first and then a muscle (on that has a zTissue and a zFiber on it) and run: 
+Selection order is important. This is currently designed to be used with muscles that are setup with zTissue and zFiber nodes. First, select two rivets and then a muscle, then run: 
 ```
 cg_ziva_create_loa();
 ```
 #### How to import/export my setup ?
 Use:
+The setup must be written to a .mel file. Use the following command to Export/Import your setup. Your may import a setup after a zBuild, if you rebuild your ziva muscle setup.
 ```
 cg_ziva_write_loa_setup_ui();
 ```
 #### How to mirror my rivets and curves setup ?
-At the moment it is designed to work with zTissues with zFiber only, so the script will not work if you did not build the setup attaching it to muscle(s) at the same time. Select your setup (rivets + curves) and run:
+At the moment it is designed to work with zTissues with zFiber only, so the command will not work if you did not build the setup attaching it to muscle(s) at the same time. Select your setup (rivets + curves) and run:
 ```
 cg_ziva_mirror_loa_setup();
 ```
